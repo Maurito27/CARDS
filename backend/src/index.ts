@@ -7,18 +7,20 @@ import { pool } from "./db.js";
 import { redirectRouter } from "./routes/redirect.js";
 import { cardsRouter } from "./routes/cards.js";
 import { authRouter } from "./routes/auth.js";
+import { prospectsRouter } from "./routes/prospects.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { generatePublicId } from "./utils/publicId.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function runMigrations() {
-  const sql = fs.readFileSync(
-    path.join(__dirname, "migrations/001_init.sql"),
-    "utf-8"
-  );
-  await pool.query(sql);
-  console.log("[db] Migrations applied");
+  const migrationsDir = path.join(__dirname, "migrations");
+  const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), "utf-8");
+    await pool.query(sql);
+    console.log(`[db] Migration applied: ${file}`);
+  }
 }
 
 async function seedIfEmpty() {
@@ -70,6 +72,7 @@ app.use("/api/auth", authRouter);
 
 // Protected routes
 app.use("/api/cards", authMiddleware, cardsRouter);
+app.use("/api/prospects", authMiddleware, prospectsRouter);
 
 // Health check
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));

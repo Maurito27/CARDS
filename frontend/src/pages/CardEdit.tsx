@@ -6,6 +6,7 @@ import {
   getPermanentUrl,
   type CardDetail,
 } from "../api.js";
+import AppNav from "../components/AppNav.js";
 
 export default function CardEdit() {
   const { id } = useParams<{ id: string }>();
@@ -112,23 +113,13 @@ export default function CardEdit() {
 
   return (
     <div className="app-layout">
-      <header className="topbar">
-        <div className="topbar-brand">CARDS</div>
-        <div className="topbar-actions">
+      <AppNav
+        actions={
           <button className="btn btn-ghost" onClick={() => navigate("/")}>
             ← Volver
           </button>
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              localStorage.removeItem("token");
-              navigate("/login");
-            }}
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </header>
+        }
+      />
 
       <main className="page-content">
         <div className="edit-layout">

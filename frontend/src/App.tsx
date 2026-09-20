@@ -2,6 +2,9 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login.js";
 import CardList from "./pages/CardList.js";
 import CardEdit from "./pages/CardEdit.js";
+import SalesDashboard from "./pages/SalesDashboard.js";
+import ProspectList from "./pages/ProspectList.js";
+import ProspectDetail from "./pages/ProspectDetail.js";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem("token");
@@ -26,6 +29,30 @@ export default function App() {
         element={
           <ProtectedRoute>
             <CardEdit />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales"
+        element={
+          <ProtectedRoute>
+            <ProspectList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales/dashboard"
+        element={
+          <ProtectedRoute>
+            <SalesDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales/prospect/:id"
+        element={
+          <ProtectedRoute>
+            <ProspectDetail />
           </ProtectedRoute>
         }
       />

@@ -1,0 +1,391 @@
+import { useEffect, useState, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import AppNav from "../components/AppNav.js";
+import {
+  salesApi,
+  PIPELINE_STATES,
+  PRIORITIES,
+  statusLabel,
+  priorityLabel,
+  evidenceLabel,
+  type Prospect,
+  type ImportResult,
+} from "../salesApi.js";
+
+export default function ProspectList() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [filterStatus, setFilterStatus] = useState(searchParams.get("status") || "");
+  const [filterZone, setFilterZone] = useState(searchParams.get("zona") || "");
+  const [filterPriority, setFilterPriority] = useState(searchParams.get("priority") || "");
+  const [search, setSearch] = useState("");
+
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [newNegocio, setNewNegocio] = useState("");
+  const [newZona, setNewZona] = useState("");
+  const [newRubro, setNewRubro] = useState("");
+  const [newDireccion, setNewDireccion] = useState("");
+
+  const fetchProspects = useCallback(async () => {
+    try {
+      const params: { status?: string; zona?: string; priority?: string } = {};
+      if (filterStatus) params.status = filterStatus;
+      if (filterZone) params.zona = filterZone;
+      if (filterPriority) params.priority = filterPriority;
+      const data = await salesApi.list(params);
+      setProspects(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cargar prospectos");
+    } finally {
+      setLoading(false);
+    }
+  }, [filterStatus, filterZone, filterPriority]);
+
+  useEffect(() => {
+    fetchProspects();
+  }, [fetchProspects]);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (filterStatus) params.status = filterStatus;
+    if (filterZone) params.zona = filterZone;
+    if (filterPriority) params.priority = filterPriority;
+    setSearchParams(params, { replace: true });
+  }, [filterStatus, filterZone, filterPriority, setSearchParams]);
+
+  const zones = Array.from(new Set(prospects.map((p) => p.zona).filter(Boolean))) as string[];
+
+  const filtered = prospects.filter((p) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      p.negocio?.toLowerCase().includes(q) ||
+      p.rubro?.toLowerCase().includes(q) ||
+      p.direccion?.toLowerCase().includes(q) ||
+      p.decision_maker?.toLowerCase().includes(q)
+    );
+  });
+
+  const handleImport = async () => {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const parsed = JSON.parse(importText);
+      const result = await salesApi.import(parsed);
+      setImportResult(result);
+      if (result.inserted > 0) {
+        await fetchProspects();
+      }
+    } catch (err) {
+      setImportResult({
+        inserted: 0,
+        errors: [err instanceof Error ? err.message : "JSON inválido"],
+        total: 0,
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setImportText((ev.target?.result as string) || "");
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await salesApi.create({
+        negocio: newNegocio,
+        zona: newZona || undefined,
+        rubro: newRubro || undefined,
+        direccion: newDireccion || undefined,
+      });
+      setNewNegocio("");
+      setNewZona("");
+      setNewRubro("");
+      setNewDireccion("");
+      setShowCreate(false);
+      await fetchProspects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al crear");
+    }
+  };
+
+  const handleQuickStatus = async (p: Prospect, newStatus: string) => {
+    try {
+      await salesApi.update(p.id, { status: newStatus });
+      await fetchProspects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    }
+  };
+
+  if (loading) return <div className="page-loading">Cargando prospectos...</div>;
+
+  return (
+    <div className="app-layout">
+      <AppNav
+        actions={
+          <>
+            <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+                Importar JSON
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              + Prospecto
+            </button>
+          </>
+        }
+      />
+
+      <main className="page-content">
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <div className="prospect-header-row">
+          <h2 className="page-title">Prospectos</h2>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate("/sales/dashboard")}>
+            Dashboard
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="filter-bar">
+          <input
+            type="text"
+            className="text-input filter-search"
+            placeholder="Buscar..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className="text-input filter-select"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">Todos los estados</option>
+            {PIPELINE_STATES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+          <select
+            className="text-input filter-select"
+            value={filterZone}
+            onChange={(e) => setFilterZone(e.target.value)}
+          >
+            <option value="">Todas las zonas</option>
+            {zones.map((z) => (
+              <option key={z} value={z}>{z}</option>
+            ))}
+          </select>
+          <select
+            className="text-input filter-select"
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+          >
+            <option value="">Toda prioridad</option>
+            {PRIORITIES.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Prospect table */}
+        <div className="prospect-table-wrap">
+          <table className="prospect-table">
+            <thead>
+              <tr>
+                <th>Negocio</th>
+                <th>Zona</th>
+                <th>Rubro</th>
+                <th>Estado</th>
+                <th>Prioridad</th>
+                <th>Evidencia</th>
+                <th>Próxima acción</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => (
+                <tr
+                  key={p.id}
+                  className={`prospect-row ${p.status === "descartado" ? "prospect-row-muted" : ""}`}
+                  onClick={() => navigate(`/sales/prospect/${p.id}`)}
+                >
+                  <td className="prospect-cell-name">
+                    <span className="prospect-name">{p.negocio}</span>
+                    {p.decision_maker && (
+                      <span className="prospect-sub">{p.decision_maker}</span>
+                    )}
+                  </td>
+                  <td>{p.zona || "—"}</td>
+                  <td>{p.rubro || "—"}</td>
+                  <td>
+                    <select
+                      className="status-select"
+                      value={p.status}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => handleQuickStatus(p, e.target.value)}
+                    >
+                      {PIPELINE_STATES.map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <span className={`priority-badge priority-${p.priority}`}>
+                      {priorityLabel(p.priority)}
+                    </span>
+                  </td>
+                  <td>
+                    {p.commercial_evidence ? (
+                      <span className={`evidence-badge evidence-${p.commercial_evidence}`}>
+                        {evidenceLabel(p.commercial_evidence)}
+                      </span>
+                    ) : "—"}
+                  </td>
+                  <td className="prospect-cell-next">
+                    {p.next_action ? (
+                      <>
+                        <span className="prospect-next-action">{p.next_action}</span>
+                        {p.next_action_date && (
+                          <span className="prospect-next-date">
+                            {new Date(p.next_action_date).toLocaleDateString("es-AR")}
+                          </span>
+                        )}
+                      </>
+                    ) : "—"}
+                  </td>
+                  <td>
+                    <button className="btn btn-secondary btn-sm">Ver</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {filtered.length === 0 && !error && (
+            <div className="empty-state">
+              <p>No hay prospectos con estos filtros.</p>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Import modal */}
+      {showImport && (
+        <div className="modal-overlay" onClick={() => setShowImport(false)}>
+          <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Importar prospectos (JSON)</h3>
+            <p className="field-hint">
+              Pegá el JSON de prospectos o subí un archivo .json. Campos reconocidos: negocio, rubro, zona, direccion, google_maps, web, instagram, whatsapp_phone, source.
+            </p>
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={handleFileImport}
+              className="file-input"
+            />
+            <textarea
+              className="text-input import-textarea"
+              placeholder='[\n  { "negocio": "Café XYZ", "zona": "Palermo", "rubro": "Cafetería" }\n]'
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              rows={10}
+            />
+            {importResult && (
+              <div className="import-result">
+                <p className="import-success">Importados: {importResult.inserted} / {importResult.total}</p>
+                {importResult.errors.length > 0 && (
+                  <ul className="import-errors">
+                    {importResult.errors.map((e, i) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => { setShowImport(false); setImportResult(null); setImportText(""); }}>
+                Cerrar
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleImport}
+                disabled={importing || !importText.trim()}
+              >
+                {importing ? "Importando..." : "Importar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create modal */}
+      {showCreate && (
+        <div className="modal-overlay" onClick={() => setShowCreate(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Nuevo prospecto</h3>
+            <form onSubmit={handleCreate}>
+              <label className="field-label">Negocio *</label>
+              <input
+                type="text"
+                className="text-input"
+                placeholder="Café XYZ"
+                value={newNegocio}
+                onChange={(e) => setNewNegocio(e.target.value)}
+                required
+                autoFocus
+              />
+              <label className="field-label">Zona</label>
+              <input
+                type="text"
+                className="text-input"
+                placeholder="Palermo"
+                value={newZona}
+                onChange={(e) => setNewZona(e.target.value)}
+              />
+              <label className="field-label">Rubro</label>
+              <input
+                type="text"
+                className="text-input"
+                placeholder="Cafetería"
+                value={newRubro}
+                onChange={(e) => setNewRubro(e.target.value)}
+              />
+              <label className="field-label">Dirección</label>
+              <input
+                type="text"
+                className="text-input"
+                placeholder="Av. Santa Fe 1234"
+                value={newDireccion}
+                onChange={(e) => setNewDireccion(e.target.value)}
+              />
+              <div className="modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary">Crear</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

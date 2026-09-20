@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { api, getPermanentUrl, type Card } from "../api.js";
+import AppNav from "../components/AppNav.js";
 
 export default function CardList() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -76,17 +77,13 @@ export default function CardList() {
 
   return (
     <div className="app-layout">
-      <header className="topbar">
-        <div className="topbar-brand">CARDS</div>
-        <div className="topbar-actions">
+      <AppNav
+        actions={
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
             + Nueva Card
           </button>
-          <button className="btn btn-ghost" onClick={handleLogout}>
-            Cerrar sesión
-          </button>
-        </div>
-      </header>
+        }
+      />
 
       <main className="page-content">
         {error && <div className="alert alert-error">{error}</div>}
