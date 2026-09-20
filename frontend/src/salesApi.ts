@@ -30,6 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export interface Prospect {
   id: string;
+  external_id: string | null;
   negocio: string;
   rubro: string | null;
   zona: string | null;
@@ -44,6 +45,8 @@ export interface Prospect {
   current_solution: string | null;
   observed_problem: string | null;
   hypothesis: string | null;
+  hipotesis_comercial: string | null;
+  que_falta_saber: string | null;
   decision_maker: string | null;
   decision_maker_contact: string | null;
   approx_tables: number | null;
@@ -58,6 +61,16 @@ export interface Prospect {
   responsible: string | null;
   payment_status: string;
   notes: string | null;
+  rating_publico: number | null;
+  cantidad_resenas_publicas: number | null;
+  rango_precio_publico: string | null;
+  research_completeness: string | null;
+  tipo_fuente: string | null;
+  source_ref_auditoria: string | null;
+  verificado_el: string | null;
+  contactado: boolean;
+  fecha_ultima_interaccion: string | null;
+  resultado_ultima_interaccion: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -89,10 +102,15 @@ export interface DashboardMetrics {
   byStatus: Record<string, number>;
   byZone: Record<string, number>;
   byEvidence: Record<string, number>;
+  byResearch: Record<string, number>;
   topObjections: Array<{ objection: string; count: number }>;
   topValuedFeatures: Array<{ feature: string; count: number }>;
   totalProspects: number;
   totalSales: number;
+  totalEnriquecidos: number;
+  totalContactados: number;
+  totalZonas: number;
+  totalPrioridadAlta: number;
 }
 
 export interface ImportResult {

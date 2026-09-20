@@ -10,6 +10,7 @@ import {
   evidenceLabel,
   type Prospect,
   type ImportResult,
+  type DashboardMetrics,
 } from "../salesApi.js";
 
 export default function ProspectList() {
@@ -17,12 +18,14 @@ export default function ProspectList() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [filterStatus, setFilterStatus] = useState(searchParams.get("status") || "");
   const [filterZone, setFilterZone] = useState(searchParams.get("zona") || "");
   const [filterPriority, setFilterPriority] = useState(searchParams.get("priority") || "");
+  const [filterResearch, setFilterResearch] = useState(searchParams.get("research") || "");
   const [search, setSearch] = useState("");
 
   const [showImport, setShowImport] = useState(false);
@@ -42,8 +45,9 @@ export default function ProspectList() {
       if (filterStatus) params.status = filterStatus;
       if (filterZone) params.zona = filterZone;
       if (filterPriority) params.priority = filterPriority;
-      const data = await salesApi.list(params);
+      const [data, m] = await Promise.all([salesApi.list(params), salesApi.metrics()]);
       setProspects(data);
+      setMetrics(m);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar prospectos");
     } finally {
@@ -67,13 +71,16 @@ export default function ProspectList() {
   const zones = Array.from(new Set(prospects.map((p) => p.zona).filter(Boolean))) as string[];
 
   const filtered = prospects.filter((p) => {
+    if (filterResearch && p.research_completeness !== filterResearch) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
       p.negocio?.toLowerCase().includes(q) ||
       p.rubro?.toLowerCase().includes(q) ||
       p.direccion?.toLowerCase().includes(q) ||
-      p.decision_maker?.toLowerCase().includes(q)
+      p.decision_maker?.toLowerCase().includes(q) ||
+      p.hipotesis_comercial?.toLowerCase().includes(q) ||
+      p.zona?.toLowerCase().includes(q)
     );
   });
 
@@ -158,10 +165,39 @@ export default function ProspectList() {
         {error && <div className="alert alert-error">{error}</div>}
 
         <div className="prospect-header-row">
-          <h2 className="page-title">Prospectos</h2>
+          <h2 className="page-title">Prospectos — Sales Discovery</h2>
           <button className="btn btn-ghost btn-sm" onClick={() => navigate("/sales/dashboard")}>
             Dashboard
           </button>
+        </div>
+
+        {/* Evidence rule notice */}
+        <div className="evidence-notice">
+          <strong>Regla:</strong> "Investigado" significa verificado públicamente. No implica necesidad, interés ni intención de compra. Campos vacíos = no verificado/no encontrado.
+        </div>
+
+        {/* KPI cards */}
+        <div className="prospect-kpis">
+          <div className="prospect-kpi">
+            <b>{metrics?.totalProspects ?? prospects.length}</b>
+            <span>prospectos</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalZonas ?? zones.length}</b>
+            <span>microzonas</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalPrioridadAlta ?? 0}</b>
+            <span>prioridad alta</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalEnriquecidos ?? 0}</b>
+            <span>enriquecidos</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalContactados ?? 0}</b>
+            <span>contactados</span>
+          </div>
         </div>
 
         {/* Filters */}
@@ -169,7 +205,7 @@ export default function ProspectList() {
           <input
             type="text"
             className="text-input filter-search"
-            placeholder="Buscar..."
+            placeholder="Buscar negocio, dirección, hipótesis..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -203,7 +239,18 @@ export default function ProspectList() {
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
+          <select
+            className="text-input filter-select"
+            value={filterResearch}
+            onChange={(e) => setFilterResearch(e.target.value)}
+          >
+            <option value="">Todo research</option>
+            <option value="Básico">Básico</option>
+            <option value="Enriquecido">Enriquecido</option>
+          </select>
         </div>
+
+        <p className="filter-count">{filtered.length} prospectos</p>
 
         {/* Prospect table */}
         <div className="prospect-table-wrap">
@@ -213,9 +260,13 @@ export default function ProspectList() {
                 <th>Negocio</th>
                 <th>Zona</th>
                 <th>Rubro</th>
+                <th>Rating</th>
+                <th>Research</th>
                 <th>Estado</th>
                 <th>Prioridad</th>
-                <th>Evidencia</th>
+                <th>Hipótesis comercial</th>
+                <th>Solución actual</th>
+                <th>Falta saber</th>
                 <th>Próxima acción</th>
                 <th></th>
               </tr>
@@ -229,12 +280,35 @@ export default function ProspectList() {
                 >
                   <td className="prospect-cell-name">
                     <span className="prospect-name">{p.negocio}</span>
-                    {p.decision_maker && (
-                      <span className="prospect-sub">{p.decision_maker}</span>
+                    {p.whatsapp_phone && (
+                      <span className="prospect-sub">{p.whatsapp_phone}</span>
+                    )}
+                    {p.google_maps && (
+                      <a href={p.google_maps} target="_blank" rel="noopener noreferrer" className="prospect-map-link" onClick={(e) => e.stopPropagation()}>
+                        📍 Maps
+                      </a>
                     )}
                   </td>
                   <td>{p.zona || "—"}</td>
                   <td>{p.rubro || "—"}</td>
+                  <td>
+                    {p.rating_publico != null ? (
+                      <div className="rating-cell">
+                        <span className="rating-star">★</span>
+                        <span className="rating-value">{p.rating_publico}</span>
+                        {p.cantidad_resenas_publicas != null && (
+                          <span className="rating-reviews">({p.cantidad_resenas_publicas})</span>
+                        )}
+                      </div>
+                    ) : "—"}
+                  </td>
+                  <td>
+                    {p.research_completeness && (
+                      <span className={`research-badge research-${p.research_completeness === "Enriquecido" ? "enriched" : "basic"}`}>
+                        {p.research_completeness}
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <select
                       className="status-select"
@@ -252,12 +326,14 @@ export default function ProspectList() {
                       {priorityLabel(p.priority)}
                     </span>
                   </td>
-                  <td>
-                    {p.commercial_evidence ? (
-                      <span className={`evidence-badge evidence-${p.commercial_evidence}`}>
-                        {evidenceLabel(p.commercial_evidence)}
-                      </span>
-                    ) : "—"}
+                  <td className="prospect-cell-hypothesis">
+                    {p.hipotesis_comercial || "—"}
+                  </td>
+                  <td className="prospect-cell-truncated">
+                    {p.current_solution || "—"}
+                  </td>
+                  <td className="prospect-cell-truncated">
+                    {p.que_falta_saber || "—"}
                   </td>
                   <td className="prospect-cell-next">
                     {p.next_action ? (
@@ -293,7 +369,7 @@ export default function ProspectList() {
           <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
             <h3 className="modal-title">Importar prospectos (JSON)</h3>
             <p className="field-hint">
-              Pegá el JSON de prospectos o subí un archivo .json. Campos reconocidos: negocio, rubro, zona, direccion, google_maps, web, instagram, whatsapp_phone, source.
+              Pegá el JSON de prospectos o subí un archivo .json. Se mapean automáticamente todos los campos: negocio, rubro, zona, direccion, google_maps, web, instagram, telefono, rating, reseñas, research, hipótesis, solución actual, próxima acción y más.
             </p>
             <input
               type="file"

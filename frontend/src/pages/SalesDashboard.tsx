@@ -70,6 +70,30 @@ export default function SalesDashboard() {
       <main className="page-content">
         <h2 className="page-title">Sales Discovery — Dashboard</h2>
 
+        {/* KPI cards */}
+        <div className="prospect-kpis">
+          <div className="prospect-kpi">
+            <b>{metrics?.totalProspects ?? 0}</b>
+            <span>prospectos</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalZonas ?? 0}</b>
+            <span>microzonas</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalPrioridadAlta ?? 0}</b>
+            <span>prioridad alta</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalEnriquecidos ?? 0}</b>
+            <span>enriquecidos</span>
+          </div>
+          <div className="prospect-kpi">
+            <b>{metrics?.totalContactados ?? 0}</b>
+            <span>contactados</span>
+          </div>
+        </div>
+
         {/* Cadence */}
         <div className="info-section">
           <h3 className="section-title">Cadencia semanal</h3>

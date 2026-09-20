@@ -64,7 +64,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
 // Public routes
 app.use("/c", redirectRouter);

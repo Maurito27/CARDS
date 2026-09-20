@@ -46,14 +46,45 @@ prospectsRouter.get("/metrics/dashboard", async (_req, res) => {
     );
     const totalSales = salesResult.rows[0].count;
 
+    const enriquecidosResult = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM prospects WHERE research_completeness = 'Enriquecido'"
+    );
+    const totalEnriquecidos = enriquecidosResult.rows[0].count;
+
+    const contactadosResult = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM prospects WHERE contactado = true"
+    );
+    const totalContactados = contactadosResult.rows[0].count;
+
+    const zonasResult = await pool.query(
+      "SELECT COUNT(DISTINCT zona)::int AS count FROM prospects WHERE zona IS NOT NULL AND zona != ''"
+    );
+    const totalZonas = zonasResult.rows[0].count;
+
+    const prioridadAltaResult = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM prospects WHERE priority = 'alta'"
+    );
+    const totalPrioridadAlta = prioridadAltaResult.rows[0].count;
+
+    const researchRows = await pool.query(
+      "SELECT research_completeness, COUNT(*)::int AS count FROM prospects WHERE research_completeness IS NOT NULL AND research_completeness != '' GROUP BY research_completeness"
+    );
+    const byResearch: Record<string, number> = {};
+    researchRows.rows.forEach((r) => { byResearch[r.research_completeness] = r.count; });
+
     res.json({
       byStatus,
       byZone,
       byEvidence,
+      byResearch,
       topObjections,
       topValuedFeatures,
       totalProspects,
       totalSales,
+      totalEnriquecidos,
+      totalContactados,
+      totalZonas,
+      totalPrioridadAlta,
     });
   } catch {
     res.status(500).json({ error: "Error al obtener métricas" });
@@ -163,7 +194,7 @@ prospectsRouter.post("/", async (req, res) => {
 
 // ─── Import prospects from JSON array ─────────────────────────────
 prospectsRouter.post("/import", async (req, res) => {
-  const items = Array.isArray(req.body) ? req.body : req.body.prospects;
+  const items = Array.isArray(req.body) ? req.body : (req.body.prospects || req.body.prospectos);
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "Se espera un array de prospectos o { prospects: [...] }" });
   }
@@ -175,12 +206,64 @@ prospectsRouter.post("/import", async (req, res) => {
     return null;
   };
 
+  // Map Spanish status/priority/payment labels to DB enum values
+  const mapStatus = (val: unknown): string => {
+    const v = String(val || "").toLowerCase().trim();
+    const map: Record<string, string> = {
+      "investigado": "investigado",
+      "sin procesar": "sin_procesar",
+      "calificado": "calificado",
+      "visita planificada": "visita_planificada",
+      "visitado": "visitado",
+      "oportunidad": "oportunidad",
+      "demo": "demo",
+      "piloto": "piloto",
+      "propuesta": "propuesta",
+      "negociacion": "negociacion",
+      "negociación": "negociacion",
+      "confirmado": "confirmado",
+      "descartado": "descartado",
+      "pausado": "pausado",
+    };
+    return map[v] || "sin_procesar";
+  };
+
+  const mapPriority = (val: unknown): string => {
+    const v = String(val || "").toLowerCase().trim();
+    if (v === "alta") return "alta";
+    if (v === "baja") return "baja";
+    return "media";
+  };
+
+  const mapPayment = (val: unknown): string => {
+    const v = String(val || "").toLowerCase().trim();
+    const map: Record<string, string> = {
+      "no aplica": "no_aplica",
+      "sin pago": "sin_pago",
+      "seña": "sena",
+      "sena": "sena",
+      "pago parcial": "pago_parcial",
+      "pagado": "pagado",
+      "vencido": "vencido",
+    };
+    return map[v] || "sin_pago";
+  };
+
+  const mapEvidence = (val: unknown): string | null => {
+    const v = String(val || "").toLowerCase().trim();
+    if (!v || v === "ninguna") return null;
+    if (v.includes("fuerte")) return "fuerte";
+    if (v.includes("media")) return "media";
+    if (v.includes("débil") || v.includes("debil")) return "debil";
+    return null;
+  };
+
   try {
     let inserted = 0;
     const errors: string[] = [];
 
     for (const item of items) {
-      const negocio = mapField(item as Record<string, unknown>, "negocio", "business_name", "name", "nombre", "business") as string | null;
+      const negocio = mapField(item, "negocio", "business_name", "name", "nombre", "business") as string | null;
       if (!negocio || !String(negocio).trim()) {
         errors.push(`Fila ${inserted + errors.length + 1}: falta nombre del negocio`);
         continue;
@@ -189,26 +272,57 @@ prospectsRouter.post("/import", async (req, res) => {
       try {
         await pool.query(
           `INSERT INTO prospects (
-            negocio, rubro, zona, direccion, google_maps, web, instagram,
-            whatsapp_phone, source, status, priority
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            external_id, negocio, rubro, zona, direccion, google_maps, web, instagram,
+            whatsapp_phone, source, status, priority, current_solution, observed_problem,
+            hipotesis_comercial, que_falta_saber, visit_objective, commercial_evidence,
+            most_valued_feature, main_objection, price_presented, next_action,
+            next_action_date, responsible, payment_status, notes,
+            rating_publico, cantidad_resenas_publicas, rango_precio_publico,
+            research_completeness, tipo_fuente, source_ref_auditoria, verificado_el,
+            contactado, fecha_ultima_interaccion, resultado_ultima_interaccion
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)`,
           [
+            mapField(item, "id", "external_id"),
             String(negocio).trim(),
-            mapField(item as Record<string, unknown>, "rubro", "category", "industry", "tipo"),
-            mapField(item as Record<string, unknown>, "zona", "zone", "neighborhood", "barrio", "area"),
-            mapField(item as Record<string, unknown>, "direccion", "address", "dirección", "location"),
-            mapField(item as Record<string, unknown>, "google_maps", "maps_url", "google_maps_url", "maps", "google_maps_link"),
-            mapField(item as Record<string, unknown>, "web", "website", "url", "sitio", "pagina_web"),
-            mapField(item as Record<string, unknown>, "instagram", "ig", "insta"),
-            mapField(item as Record<string, unknown>, "whatsapp_phone", "whatsapp", "phone", "telefono", "tel", "phone_number", "whatsapp_number"),
-            mapField(item as Record<string, unknown>, "source", "fuente", "origen") || "Importado",
-            "sin_procesar",
-            "media",
+            mapField(item, "rubro", "category", "industry", "tipo"),
+            mapField(item, "zona", "zone", "neighborhood", "barrio", "area"),
+            mapField(item, "direccion", "address", "dirección", "location"),
+            mapField(item, "google_maps", "maps_url", "google_maps_url", "maps", "google_maps_link"),
+            mapField(item, "web", "website", "url", "sitio", "pagina_web"),
+            mapField(item, "instagram", "ig", "insta"),
+            mapField(item, "whatsapp_publico", "whatsapp_phone", "whatsapp", "telefono_publico", "phone", "telefono", "tel", "phone_number", "whatsapp_number"),
+            mapField(item, "fuente_principal", "source", "fuente", "origen") || "Importado",
+            mapStatus(mapField(item, "estado_pipeline", "status", "estado")),
+            mapPriority(mapField(item, "prioridad_inicial", "priority", "prioridad")),
+            mapField(item, "solucion_actual_observada", "current_solution", "solucion_actual"),
+            mapField(item, "problema_observado", "observed_problem"),
+            mapField(item, "hipotesis_comercial", "hipotesis"),
+            mapField(item, "que_falta_saber"),
+            mapField(item, "objetivo_visita", "visit_objective"),
+            mapEvidence(mapField(item, "evidencia_comercial", "commercial_evidence")),
+            mapField(item, "funcion_mas_valorada", "most_valued_feature", "funcion_mas_valorada"),
+            mapField(item, "objecion_principal", "main_objection"),
+            mapField(item, "precio_presentado", "price_presented"),
+            mapField(item, "proxima_accion", "next_action"),
+            mapField(item, "fecha_proxima_accion", "next_action_date") || null,
+            mapField(item, "responsable") || "Mauro",
+            mapPayment(mapField(item, "estado_pago", "payment_status")),
+            mapField(item, "notas", "notes"),
+            mapField(item, "rating_publico", "rating"),
+            mapField(item, "cantidad_resenas_publicas", "reviews_count"),
+            mapField(item, "rango_precio_publico", "price_range"),
+            mapField(item, "research_completeness", "research"),
+            mapField(item, "tipo_fuente", "source_type"),
+            mapField(item, "source_ref_auditoria", "source_ref"),
+            mapField(item, "verificado_el", "verified_date") || null,
+            mapField(item, "contactado") ?? false,
+            mapField(item, "fecha_ultima_interaccion") || null,
+            mapField(item, "resultado_ultima_interaccion"),
           ]
         );
         inserted++;
-      } catch {
-        errors.push(`"${String(negocio).trim()}": error al insertar`);
+      } catch (e) {
+        errors.push(`"${String(negocio).trim()}": ${(e as Error).message}`);
       }
     }
 
@@ -227,6 +341,10 @@ prospectsRouter.patch("/:id", async (req, res) => {
     "approx_tables", "visit_objective", "result", "commercial_evidence",
     "most_valued_feature", "main_objection", "price_presented", "next_action",
     "next_action_date", "responsible", "payment_status", "notes",
+    "hipotesis_comercial", "que_falta_saber", "rating_publico",
+    "cantidad_resenas_publicas", "rango_precio_publico", "research_completeness",
+    "tipo_fuente", "source_ref_auditoria", "verificado_el", "contactado",
+    "fecha_ultima_interaccion", "resultado_ultima_interaccion", "external_id",
   ];
 
   try {

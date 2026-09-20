@@ -260,11 +260,27 @@ export default function ProspectDetail() {
                   <span className="machete-info-value">{prospect.current_solution || "Sin investigar"}</span>
                 </div>
                 <div className="machete-info-item machete-info-full">
-                  <span className="machete-info-label">Hipótesis</span>
+                  <span className="machete-info-label">Hipótesis comercial</span>
                   <span className="machete-info-value">
-                    {hypothesisLabel || "Sin hipótesis asignada"}
+                    {prospect.hipotesis_comercial || hypothesisLabel || "Sin hipótesis asignada"}
                   </span>
                 </div>
+                {prospect.que_falta_saber && (
+                  <div className="machete-info-item machete-info-full">
+                    <span className="machete-info-label">Qué falta saber</span>
+                    <span className="machete-info-value">{prospect.que_falta_saber}</span>
+                  </div>
+                )}
+                {(prospect.rating_publico != null || prospect.research_completeness) && (
+                  <div className="machete-info-item">
+                    <span className="machete-info-label">Research</span>
+                    <span className="machete-info-value">
+                      {prospect.research_completeness || "—"}
+                      {prospect.rating_publico != null && ` · ★ ${prospect.rating_publico}`}
+                      {prospect.cantidad_resenas_publicas != null && ` (${prospect.cantidad_resenas_publicas} reseñas)`}
+                    </span>
+                  </div>
+                )}
                 <div className="machete-info-item machete-info-full">
                   <span className="machete-info-label">Objetivo concreto</span>
                   <span className="machete-info-value">{prospect.visit_objective || "No definido"}</span>
