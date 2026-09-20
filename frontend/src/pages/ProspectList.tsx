@@ -144,6 +144,44 @@ export default function ProspectList() {
     }
   };
 
+  const handleExportCSV = () => {
+    const headers = [
+      "ID", "Negocio", "Rubro", "Zona", "Direccion", "Telefono",
+      "Google Maps", "Web", "Instagram", "Rating", "Reseñas",
+      "Research", "Estado", "Prioridad", "Hipotesis Comercial",
+      "Solucion Actual", "Falta Saber", "Evidencia Comercial",
+      "Funcion Mas Valorada", "Objecion Principal", "Precio Presentado",
+      "Proxima Accion", "Fecha Proxima Accion", "Responsable",
+      "Estado Pago", "Notas", "Contactado", "Fuente",
+    ];
+    const escape = (val: unknown) => {
+      const s = val == null ? "" : String(val);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const rows = filtered.map((p) => [
+      p.external_id || p.id, p.negocio, p.rubro, p.zona, p.direccion,
+      p.whatsapp_phone, p.google_maps, p.web, p.instagram,
+      p.rating_publico, p.cantidad_resenas_publicas,
+      p.research_completeness, statusLabel(p.status), priorityLabel(p.priority),
+      p.hipotesis_comercial, p.current_solution, p.que_falta_saber,
+      p.commercial_evidence, p.most_valued_feature, p.main_objection,
+      p.price_presented, p.next_action, p.next_action_date,
+      p.responsible, p.payment_status, p.notes,
+      p.contactado ? "Sí" : "No", p.source,
+    ].map(escape).join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prospectos_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return <div className="page-loading">Cargando prospectos...</div>;
 
   return (
@@ -151,6 +189,9 @@ export default function ProspectList() {
       <AppNav
         actions={
           <>
+            <button className="btn btn-secondary" onClick={handleExportCSV}>
+                Exportar CSV
+            </button>
             <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
                 Importar JSON
             </button>
@@ -252,115 +293,85 @@ export default function ProspectList() {
 
         <p className="filter-count">{filtered.length} prospectos</p>
 
-        {/* Prospect table */}
-        <div className="prospect-table-wrap">
-          <table className="prospect-table">
-            <thead>
-              <tr>
-                <th>Negocio</th>
-                <th>Zona</th>
-                <th>Rubro</th>
-                <th>Rating</th>
-                <th>Research</th>
-                <th>Estado</th>
-                <th>Prioridad</th>
-                <th>Hipótesis comercial</th>
-                <th>Solución actual</th>
-                <th>Falta saber</th>
-                <th>Próxima acción</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => (
-                <tr
-                  key={p.id}
-                  className={`prospect-row ${p.status === "descartado" ? "prospect-row-muted" : ""}`}
-                  onClick={() => navigate(`/sales/prospect/${p.id}`)}
-                >
-                  <td className="prospect-cell-name">
-                    <span className="prospect-name">{p.negocio}</span>
-                    {p.whatsapp_phone && (
-                      <span className="prospect-sub">{p.whatsapp_phone}</span>
-                    )}
-                    {p.google_maps && (
-                      <a href={p.google_maps} target="_blank" rel="noopener noreferrer" className="prospect-map-link" onClick={(e) => e.stopPropagation()}>
-                        📍 Maps
-                      </a>
-                    )}
-                  </td>
-                  <td>{p.zona || "—"}</td>
-                  <td>{p.rubro || "—"}</td>
-                  <td>
-                    {p.rating_publico != null ? (
-                      <div className="rating-cell">
-                        <span className="rating-star">★</span>
-                        <span className="rating-value">{p.rating_publico}</span>
-                        {p.cantidad_resenas_publicas != null && (
-                          <span className="rating-reviews">({p.cantidad_resenas_publicas})</span>
-                        )}
-                      </div>
-                    ) : "—"}
-                  </td>
-                  <td>
-                    {p.research_completeness && (
-                      <span className={`research-badge research-${p.research_completeness === "Enriquecido" ? "enriched" : "basic"}`}>
-                        {p.research_completeness}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <select
-                      className="status-select"
-                      value={p.status}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => handleQuickStatus(p, e.target.value)}
-                    >
-                      {PIPELINE_STATES.map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <span className={`priority-badge priority-${p.priority}`}>
-                      {priorityLabel(p.priority)}
+        {/* Prospect cards */}
+        <div className="prospect-card-grid">
+          {filtered.map((p) => (
+            <div
+              key={p.id}
+              className={`prospect-card ${p.status === "descartado" ? "prospect-card-muted" : ""}`}
+              onClick={() => navigate(`/sales/prospect/${p.id}`)}
+            >
+              <div className="prospect-card-top">
+                <div className="prospect-card-title-row">
+                  <span className="prospect-card-name">{p.negocio}</span>
+                  {p.rating_publico != null && (
+                    <span className="prospect-card-rating">
+                      <span className="rating-star">★</span>
+                      <span className="rating-value">{p.rating_publico}</span>
+                      {p.cantidad_resenas_publicas != null && (
+                        <span className="rating-reviews">({p.cantidad_resenas_publicas})</span>
+                      )}
                     </span>
-                  </td>
-                  <td className="prospect-cell-hypothesis">
-                    {p.hipotesis_comercial || "—"}
-                  </td>
-                  <td className="prospect-cell-truncated">
-                    {p.current_solution || "—"}
-                  </td>
-                  <td className="prospect-cell-truncated">
-                    {p.que_falta_saber || "—"}
-                  </td>
-                  <td className="prospect-cell-next">
-                    {p.next_action ? (
-                      <>
-                        <span className="prospect-next-action">{p.next_action}</span>
-                        {p.next_action_date && (
-                          <span className="prospect-next-date">
-                            {new Date(p.next_action_date).toLocaleDateString("es-AR")}
-                          </span>
-                        )}
-                      </>
-                    ) : "—"}
-                  </td>
-                  <td>
-                    <button className="btn btn-secondary btn-sm">Ver</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  )}
+                </div>
+                <div className="prospect-card-meta">
+                  {p.zona && <span className="prospect-card-zone">{p.zona}</span>}
+                  {p.rubro && <span className="prospect-card-rubro">{p.rubro}</span>}
+                </div>
+                <div className="prospect-card-contact">
+                  {p.whatsapp_phone && <span className="prospect-card-phone">📞 {p.whatsapp_phone}</span>}
+                  {p.google_maps && (
+                    <a href={p.google_maps} target="_blank" rel="noopener noreferrer" className="prospect-map-link" onClick={(e) => e.stopPropagation()}>
+                      📍 Maps
+                    </a>
+                  )}
+                </div>
+              </div>
 
-          {filtered.length === 0 && !error && (
-            <div className="empty-state">
-              <p>No hay prospectos con estos filtros.</p>
+              <div className="prospect-card-badges">
+                <select
+                  className="status-select"
+                  value={p.status}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleQuickStatus(p, e.target.value)}
+                >
+                  {PIPELINE_STATES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+                <span className={`priority-badge priority-${p.priority}`}>
+                  {priorityLabel(p.priority)}
+                </span>
+                {p.research_completeness && (
+                  <span className={`research-badge research-${p.research_completeness === "Enriquecido" ? "enriched" : "basic"}`}>
+                    {p.research_completeness}
+                  </span>
+                )}
+              </div>
+
+              {p.hipotesis_comercial && (
+                <p className="prospect-card-hypothesis">{p.hipotesis_comercial}</p>
+              )}
+
+              {p.next_action && (
+                <div className="prospect-card-next">
+                  <span className="prospect-next-action">→ {p.next_action}</span>
+                  {p.next_action_date && (
+                    <span className="prospect-next-date">
+                      {new Date(p.next_action_date).toLocaleDateString("es-AR")}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
+
+        {filtered.length === 0 && !error && (
+          <div className="empty-state">
+            <p>No hay prospectos con estos filtros.</p>
+          </div>
+        )}
       </main>
 
       {/* Import modal */}
