@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import { api, getPermanentUrl, type Card } from "../api.js";
 
 export default function CardList() {
@@ -101,12 +102,17 @@ export default function CardList() {
                 className={`card-item ${card.status === "disabled" ? "card-disabled" : ""}`}
               >
                 <div className="card-item-header">
-                  <span className="card-item-name">{card.name}</span>
-                  <span
-                    className={`badge ${card.status === "active" ? "badge-active" : "badge-disabled"}`}
-                  >
-                    {card.status === "active" ? "Activa" : "Desactivada"}
-                  </span>
+                  <div className="card-item-header-info">
+                    <span className="card-item-name">{card.name}</span>
+                    <span
+                      className={`badge ${card.status === "active" ? "badge-active" : "badge-disabled"}`}
+                    >
+                      {card.status === "active" ? "Activa" : "Desactivada"}
+                    </span>
+                  </div>
+                  <div className="card-qr-thumb">
+                    <QRCodeSVG value={url} size={48} level="M" />
+                  </div>
                 </div>
 
                 <div className="card-item-field">
@@ -142,13 +148,13 @@ export default function CardList() {
 
                 <div className="card-item-actions">
                   <button
-                    className="btn btn-secondary btn-sm"
+                    className="btn btn-secondary btn-sm btn-flex"
                     onClick={() => navigate(`/cards/${card.id}`)}
                   >
                     Editar
                   </button>
                   <button
-                    className={`btn btn-sm ${card.status === "active" ? "btn-danger" : "btn-success"}`}
+                    className={`btn btn-sm btn-flex ${card.status === "active" ? "btn-danger" : "btn-success"}`}
                     onClick={() => handleToggleStatus(card)}
                   >
                     {card.status === "active" ? "Desactivar" : "Activar"}
